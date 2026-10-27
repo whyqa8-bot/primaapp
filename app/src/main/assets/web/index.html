@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D47A1">
+  <title>Prima Carts</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="map"></div>
+
+  <header class="topbar">
+    <div class="brand">Prima<span>Carts</span></div>
+    <div class="topbtns">
+      <button id="btnHistory" class="chip" type="button">Riwayat</button>
+      <button id="btnLocate" class="round" type="button" aria-label="Lokasi saya">&#9678;</button>
+    </div>
+  </header>
+
+  <section id="sheet" class="sheet">
+    <div class="grab"></div>
+
+    <div class="tabs" role="tablist">
+      <button id="tabPassenger" class="tab active" type="button" data-mode="passenger">&#128702; Penumpang</button>
+      <button id="tabCourier" class="tab" type="button" data-mode="courier">&#128230; Kurir</button>
+    </div>
+
+    <div class="field">
+      <span class="dot dot-pickup"></span>
+      <div class="inputwrap">
+        <label id="lblPickup" for="pickup">Jemput di</label>
+        <input id="pickup" type="text" placeholder="Cari lokasi jemput atau ketuk peta" autocomplete="off">
+        <ul id="sugPickup" class="sug"></ul>
+      </div>
+      <button id="btnGps" class="mini" type="button">GPS</button>
+    </div>
+
+    <div class="field">
+      <span class="dot dot-dest"></span>
+      <div class="inputwrap">
+        <label id="lblDest" for="dest">Tujuan</label>
+        <input id="dest" type="text" placeholder="Mau ke mana?" autocomplete="off">
+        <ul id="sugDest" class="sug"></ul>
+      </div>
+    </div>
+
+    <div id="courierBox" class="courier hidden">
+      <div class="row2">
+        <div>
+          <label for="itemType">Jenis barang</label>
+          <select id="itemType">
+            <option>Dokumen</option>
+            <option>Paket kecil</option>
+            <option>Makanan</option>
+            <option>Pakaian</option>
+            <option>Elektronik</option>
+            <option>Lainnya</option>
+          </select>
+        </div>
+        <div>
+          <label for="receiverName">Nama penerima</label>
+          <input id="receiverName" type="text" maxlength="40" placeholder="Nama penerima">
+        </div>
+      </div>
+      <label for="receiverPhone">No. HP penerima</label>
+      <input id="receiverPhone" type="tel" inputmode="tel" maxlength="16" placeholder="08xxxxxxxxxx">
+      <label for="note">Catatan untuk driver (opsional)</label>
+      <textarea id="note" rows="2" maxlength="140" placeholder="Contoh: titip ke satpam"></textarea>
+    </div>
+
+    <div id="summary" class="summary"></div>
+    <div id="options" class="options"></div>
+
+    <div class="pay">Pembayaran: <b>Tunai</b> <small>(mode demo)</small></div>
+    <button id="btnOrder" class="order" type="button" disabled>Pesan sekarang</button>
+    <p class="demo">Mode demo: belum terhubung ke driver dan pembayaran sungguhan. Tarif hanyalah estimasi.</p>
+  </section>
+
+  <div id="overlay" class="overlay hidden"><div id="overlayBody" class="modal"></div></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

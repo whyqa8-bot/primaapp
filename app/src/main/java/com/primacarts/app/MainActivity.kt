@@ -1,16 +1,20 @@
 package com.primacarts.app
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.webkit.GeolocationPermissions
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,12 +24,16 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.WebViewAssetLoader
 
 class MainActivity : AppCompatActivity() {
 
-    private val homeUrl = "https://primacarts.com/"
-    private val allowedHost = "primacarts.com"
+    // Halaman web ada di dalam aplikasi (folder assets/web), disajikan lewat
+    // alamat https virtual supaya GPS (geolocation) dan fetch berfungsi normal.
+    private val appHost = "appassets.androidplatform.net"
+    private val homeUrl = "https://$appHost/assets/web/index.html"
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -35,7 +43,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnHome: ImageButton
     private lateinit var btnRefresh: ImageButton
 
+    private val assetLoader by lazy {
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+    }
+
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingGeoOrigin: String? = null
+    private var pendingGeoCallback: GeolocationPermissions.Callback? = null
 
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -44,7 +60,20 @@ class MainActivity : AppCompatActivity() {
             filePathCallback = null
         }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private val locationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val granted = grants.values.any { it }
+            pendingGeoCallback?.invoke(pendingGeoOrigin, granted, false)
+            pendingGeoCallback = null
+            pendingGeoOrigin = null
+        }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -60,10 +89,8 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         setupNavigationBar()
 
-        swipeRefresh.setColorSchemeResources(R.color.primary)
-        swipeRefresh.setOnRefreshListener { webView.reload() }
-        // Cegah pull-to-refresh aktif saat halaman sedang di-scroll ke bawah
-        swipeRefresh.setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
+        // Pull-to-refresh dimatikan agar tidak bentrok dengan menggeser peta
+        swipeRefresh.isEnabled = false
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -92,17 +119,22 @@ class MainActivity : AppCompatActivity() {
             databaseEnabled = true
             loadWithOverviewMode = true
             useWideViewPort = true
-            builtInZoomControls = true
+            builtInZoomControls = false
             displayZoomControls = false
-            setSupportZoom(true)
             allowFileAccess = false
-            allowContentAccess = true
+            allowContentAccess = false
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             cacheMode = WebSettings.LOAD_DEFAULT
+            setGeolocationEnabled(true)
         }
 
         webView.webViewClient = object : WebViewClient() {
+
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest
+            ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
 
             override fun shouldOverrideUrlLoading(
                 view: WebView,
@@ -111,13 +143,11 @@ class MainActivity : AppCompatActivity() {
                 val uri = request.url
                 val scheme = uri.scheme ?: return false
 
-                // Halaman web biasa
                 if (scheme == "http" || scheme == "https") {
-                    val host = uri.host ?: ""
-                    return if (host == allowedHost || host.endsWith(".$allowedHost")) {
-                        false // tetap di dalam aplikasi
+                    return if (uri.host == appHost) {
+                        false // halaman milik aplikasi, tetap di dalam
                     } else {
-                        openExternal(uri) // domain lain dibuka di browser
+                        openExternal(uri) // situs lain dibuka di browser
                         true
                     }
                 }
@@ -161,7 +191,26 @@ class MainActivity : AppCompatActivity() {
                 progressBar.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
             }
 
-            // Dukungan tombol "Pilih file" / upload gambar di website
+            // Izin lokasi (GPS) untuk peta
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String,
+                callback: GeolocationPermissions.Callback
+            ) {
+                if (hasLocationPermission()) {
+                    callback.invoke(origin, true, false)
+                } else {
+                    pendingGeoCallback?.invoke(pendingGeoOrigin, false, false)
+                    pendingGeoOrigin = origin
+                    pendingGeoCallback = callback
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                }
+            }
+
             override fun onShowFileChooser(
                 webView: WebView,
                 callback: ValueCallback<Array<Uri>>,
@@ -184,7 +233,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Unduhan file dibuka lewat browser / aplikasi bawaan perangkat
         webView.setDownloadListener { url, _, _, _, _ ->
             openExternal(Uri.parse(url))
         }
