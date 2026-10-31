@@ -1,10 +1,9 @@
-// Ganti semua tulisan ISI_... dengan nilai dari Firebase Console
-// (lihat PANDUAN_FIREBASE.md langkah 5), lalu simpan.
+// Konfigurasi Firebase proyek primacarts (aman ada di dalam aplikasi, bukan rahasia)
 window.PC_FIREBASE_CONFIG = {
-  apiKey: "ISI_API_KEY",
-  authDomain: "ISI_PROJECT_ID.firebaseapp.com",
-  projectId: "ISI_PROJECT_ID",
-  storageBucket: "ISI_PROJECT_ID.appspot.com",
-  messagingSenderId: "ISI_SENDER_ID",
-  appId: "ISI_APP_ID"
+  apiKey: "AIzaSyALUPhFmQWuaIo7cgI7RE-g0CtM3ydCEwk",
+  authDomain: "primacarts-a1ee8.firebaseapp.com",
+  projectId: "primacarts-a1ee8",
+  storageBucket: "primacarts-a1ee8.firebasestorage.app",
+  messagingSenderId: "898109834627",
+  appId: "1:898109834627:web:3f37253ae3dd415d49e2b6"
 };
