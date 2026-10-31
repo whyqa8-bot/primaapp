@@ -1,0 +1,110 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cari dan ekstrak ZIP proyek
+        id: zip
+        run: |
+          ZIP=$(ls -t *.zip 2>/dev/null | head -n 1 || true)
+          if [ -z "$ZIP" ]; then
+            echo "Tidak ada file ZIP di repository, build dilewati."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Memakai: $ZIP"
+          mkdir proj
+          unzip -q "$ZIP" -d proj
+          SETTINGS=$(find proj \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle tidak ditemukan di dalam ZIP"
+            exit 1
+          fi
+          ROOT=$(dirname "$SETTINGS")
+          # firebase-config.js di folder utama repository (di samping ZIP) menimpa yang ada di dalam ZIP
+          if [ -f firebase-config.js ] && [ -d "$ROOT/app/src/main/assets/web" ]; then
+            cp firebase-config.js "$ROOT/app/src/main/assets/web/firebase-config.js"
+            echo "firebase-config.js dari repository dipakai."
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        if: steps.zip.outputs.found == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Terima lisensi Android SDK
+        if: steps.zip.outputs.found == 'true'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.zip.outputs.found == 'true'
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        if: steps.zip.outputs.found == 'true'
+        env:
+          ROOT: ${{ steps.zip.outputs.root }}
+        run: |
+          set +e
+          cd "$ROOT"
+          gradle assembleDebug --no-daemon --console=plain > "$GITHUB_WORKSPACE/build.log" 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            {
+              echo "### Build gagal - penyebab:"
+              echo '```'
+              grep -n -E "error:|What went wrong|Execution failed|Could not|not found|cannot find symbol" -A4 "$GITHUB_WORKSPACE/build.log" | head -80
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "===== 120 baris terakhir ====="
+            tail -n 120 "$GITHUB_WORKSPACE/build.log"
+          fi
+          exit $code
+
+      - name: Simpan log build
+        if: always() && steps.zip.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Siapkan APK
+        if: steps.zip.outputs.found == 'true'
+        env:
+          ROOT: ${{ steps.zip.outputs.root }}
+        run: |
+          mkdir -p dist
+          find "$ROOT/app/build/outputs/apk" -name '*.apk' | while read -r f; do
+            case "$f" in
+              *passenger*) cp "$f" dist/PrimaCarts-Penumpang.apk ;;
+              *driver*)    cp "$f" dist/PrimaCarts-Driver.apk ;;
+              *)           cp "$f" "dist/$(basename "$f")" ;;
+            esac
+          done
+          ls -la dist
+          [ -n "$(ls dist)" ] || { echo "::error::APK tidak ditemukan"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.zip.outputs.found == 'true'
+        with:
+          name: PrimaCarts-APK
+          path: dist/*.apk
+
+      - name: Buat rilis (APK bisa diunduh langsung)
+        if: steps.zip.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" dist/*.apk \
+            --title "Build ${{ github.run_number }}" --notes "APK Prima Carts (Penumpang dan Driver)"
